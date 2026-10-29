@@ -93,6 +93,9 @@ class Queries(object):
                     print(f"A path returned 202. Retrying...")
                     await asyncio.sleep(2)
                     continue
+                if r_async.status != 200:
+                    # 204/403/404 etc. are final, retrying won't change them
+                    return dict()
 
                 result = await r_async.json()
                 if result is not None:
@@ -112,6 +115,8 @@ class Queries(object):
                         continue
                     elif r_requests.status_code == 200:
                         return r_requests.json()
+                    else:
+                        return dict()
         # print(f"There were too many 202s. Data for {path} will be incomplete.")
         print("There were too many 202s. Data for this repository will be incomplete.")
         return dict()
@@ -483,8 +488,11 @@ Languages:
             return self._lines_changed
         additions = 0
         deletions = 0
-        for repo in await self.repos:
-            r = await self.queries.query_rest(f"/repos/{repo}/stats/contributors")
+        repos = await self.repos
+        results = await asyncio.gather(
+            *(self.queries.query_rest(f"/repos/{repo}/stats/contributors") for repo in repos)
+        )
+        for r in results:
             for author_obj in r:
                 # Handle malformed response from the API by skipping this repo
                 if not isinstance(author_obj, dict) or not isinstance(
@@ -512,8 +520,11 @@ Languages:
             return self._views
 
         total = 0
-        for repo in await self.repos:
-            r = await self.queries.query_rest(f"/repos/{repo}/traffic/views")
+        repos = await self.repos
+        results = await asyncio.gather(
+            *(self.queries.query_rest(f"/repos/{repo}/traffic/views") for repo in repos)
+        )
+        for r in results:
             for view in r.get("views", []):
                 total += view.get("count", 0)
 
